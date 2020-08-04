@@ -283,8 +283,8 @@ class Animation:
         
         for n, image in enumerate(self.images):
             img = Image.fromarray(image.astype(np.uint8))
-            #img = add_white_rectangle(img, y_pixels=y_pixels)
-            #img = add_logo(img, logo_path, y_pixels=y_pixels)
+            img = add_white_rectangle(img, y_pixels=y_pixels)
+            img = add_logo(img, logo_path, y_pixels=y_pixels)
             img = add_year(img, year=str(years[n]), y_pixels=y_pixels)
             
             self.images[n,:] = np.array(img)
