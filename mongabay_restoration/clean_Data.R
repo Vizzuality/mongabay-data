@@ -144,34 +144,129 @@ head(d_gg_melt)
 
 
 
+#for( i in seq(1,301,50)){
+  
 
 ggplot(d_gg_melt %>% 
-         filter(Project.Number %in% seq(1,20,1)))+
-  geom_tile(aes(y = Project.Number, x = variable,  fill = variable,
+         filter(Project.Number %in% seq(i,i+19,1)))+
+  geom_tile(aes(y = factor(Project.Number), x = variable,  fill = variable,
                 alpha = value, 
                 width=0.75, height=0.75), colour = "white", size = 1)+
   scale_fill_manual(values = c("#FAC711", "#14CDD4", "#C17E90", "#9611AC"))+
-  scale_y_discrete(position = "right")+
+  scale_y_discrete(position = "right", name = "")+
+  #scale_x_discrete( name = "", breaks = 1, labels = "c")+
   coord_equal()+
   theme_void()+
-  #theme_classic() +
+  #theme_minimal() +
   theme(panel.background = element_rect(fill = "#F2F2F2",
                                         colour = "#F2F2F2",
                                         size = 0.0, linetype = "solid"),
-        legend.position = "none")
+        legend.position = "none",
+        axis.text.y.right = element_text(size = 8)
+        )
 
 
 
 
-#ggplot(d_gg_melt)+
-  geom_tile(aes(y = Project.Number, x = variable,  fill = variable,
+
+ggsave(paste(i,"_restoration.png"), width = 6, height = 20, units = "cm", dpi = 300)
+#}
+
+
+
+
+
+#############################################################################
+####### with project name instead of number
+names(d)
+
+
+
+
+
+d_tf = data.frame(Project.Number = d$Project.Number, Project.Name = d$Project.Name, as.data.frame(tf_matrix))
+
+d_clean = d %>% 
+  select(Project.Name, Project.Number, all_of(spat_vars),all_of(fin_vars), all_of(strat_vars), all_of(soc_vars), -all_of(yn_vars)) %>% 
+  left_join(d_tf, by = c("Project.Number", "Project.Name")) %>% 
+  mutate(tmp_pop = ifelse(Primary.objective.purpose=="", NA, Primary.objective.purpose), 
+         tmp_app = ifelse(Approach=="", NA, Approach),
+         tmp_ft = ifelse(Forest.Type=="", NA, Forest.Type)) %>% 
+  mutate(nber_pop = str_count(tmp_pop, ",") + 1,
+         nber_app = str_count(tmp_app, ",") + 1,
+         nber_ft = str_count(tmp_ft, ",") + 1) %>% 
+  select(-tmp_pop, -tmp_app, -tmp_ft, -all_of(split_vars))
+summary(d_clean)
+
+
+d_spat = d_clean %>% 
+  select(Project.Name, Project.Number, all_of(spat_vars))
+head(d_spat)
+tf_spat = d_spat %>% 
+  select(Project.Name, Project.Number, any_of(yn_vars)) 
+
+d_strat = d_clean %>% 
+  select(Project.Name, Project.Number, any_of(strat_vars), nber_pop, nber_app, nber_ft)
+head(d_strat)
+tf_strat = d_strat %>% 
+  select(Project.Name, Project.Number, any_of(yn_vars))
+
+d_fin = d_clean %>% 
+  select(Project.Name, Project.Number, all_of(fin_vars))
+head(d_fin)
+tf_fin = d_fin %>% 
+  select(Project.Name, Project.Number, any_of(yn_vars))
+
+d_soc = d_clean %>% 
+  select(Project.Name, Project.Number, all_of(soc_vars))
+head(d_soc)
+tf_soc = d_soc %>% 
+  select(Project.Name, Project.Number, any_of(yn_vars))
+
+
+d_gg_melt =  tf_spat%>% 
+  left_join(tf_strat, by = c("Project.Number", "Project.Name")) %>% 
+  left_join(tf_fin, by = c("Project.Number", "Project.Name")) %>% 
+  left_join(tf_soc, by = c("Project.Number", "Project.Name")) %>% 
+  mutate(sum_spat = as.numeric(Has.explicit.location),
+         sum_strat = Identify.deforestation.driver+ Fire.prevention+ Has.justification.for.approach+ Addresses.known.threats+ Discloses.species.used+ Use.native.species+ Use.exotic.species+ Local.seedling.nurseries,
+         sum_fin = Has.public.reports+ Follow.up.disclosed,
+         sum_soc = Has.community.involvement+ Has.gender.component+ Scientific.research.associated.with.project) %>% 
+  mutate(resc_spat = (sum_spat-0)/max(sum_spat, na.rm = T),
+         resc_strat = (sum_strat-0)/max(sum_strat, na.rm = T),
+         resc_fin = (sum_fin-0)/max(sum_fin, na.rm = T),
+         resc_soc = (sum_soc-0)/max(sum_soc, na.rm = T)) %>% 
+  select(-any_of(yn_vars), -sum_spat, -sum_strat, -sum_fin, -sum_soc) %>% 
+  melt(id.vars = c("Project.Name", "Project.Number"))
+head(d_gg_melt)
+
+
+
+
+#for( i in seq(1,301,50)){
+
+
+ggplot(d_gg_melt %>% 
+         filter(Project.Number %in% seq(i,i+19,1)))+
+  geom_tile(aes(y = factor(Project.Name), x = variable,  fill = variable,
                 alpha = value, 
                 width=0.75, height=0.75), colour = "white", size = 1)+
-  scale_fill_manual(values = c("#FAC711", "#14CDD4", "#C17E90", "#9611AC"))+
+  scale_fill_manual(values = c("#FAC711", "#14CDD4", "#C17E90", "#9611AC"), labels = c("Spatial", "Strategic", "Financial", "Social"), name = "Transparency \nComponents")+
+  scale_y_discrete(position = "right", name = "")+
+  scale_alpha_continuous(guide = "none")+
+  #scale_x_discrete( name = "", breaks = 1, labels = "c")+
   coord_equal()+
-  theme_void() +
+  theme_void()+
+  #theme_minimal() +
   theme(panel.background = element_rect(fill = "#F2F2F2",
                                         colour = "#F2F2F2",
-                                        size = 0.5, linetype = "solid"),
-        legend.position = "none")
-ggsave("oscar.png", width = 6, height = 20, units = "cm", dpi = 300)
+                                        size = 0.0, linetype = "solid"),
+        plot.background = element_rect(fill = "#F2F2F2",
+                                        colour = "#F2F2F2",
+                                        size = 0.0, linetype = "solid"),
+        axis.text.y.right = element_text(size = 8, hjust = 0, margin = margin(1,1,1,5, unit = "pt")),
+        legend.position = "left"
+  )
+
+ggsave("project_names_restoration.png", width = 20, height = 20, units = "cm", dpi = 300)
+
