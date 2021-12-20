@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import datetime as dt
 
-service_account = 'gee-tiles@skydipper-196010.iam.gserviceaccount.com'
+service_account = 'fire-water-chart@appspot.gserviceaccount.com'
 credentials = ee.ServiceAccountCredentials(service_account, 'privatekey.json')
 ee.Initialize(credentials)
 
@@ -125,7 +125,7 @@ def nestedMappedReducer(featureCol, imageCol):
 
     return featureCol.map(mapReducerOverImgCol).flatten()
 
-def fire_tool(request):
+def fire_water_chart(request):
     request = request.get_json()
     
     # Get geometry as GeoJSON from geostore
