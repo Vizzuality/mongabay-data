@@ -126,16 +126,35 @@ def nestedMappedReducer(featureCol, imageCol):
     return featureCol.map(mapReducerOverImgCol).flatten()
 
 def fire_water_chart(request):
-    request = request.get_json()
+
+    # Set CORS headers for the preflight request
+    if request.method == 'OPTIONS':
+        # Allows GET requests from any origin with the Content-Type
+        # header and caches preflight response for an 3600s
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Max-Age': '3600'
+        }
+
+        return ('', 204, headers)
+
+    # Set CORS headers for the main request
+    headers = {
+        'Access-Control-Allow-Origin': '*'
+    }
+
+    request_json = request.get_json()
     
     # Get geometry as GeoJSON from geostore
-    geometry = get_geometry(request['iso'], request['adm1'])
+    geometry = get_geometry(request_json['iso'], request_json['adm1'])
 
     # Convert geometry to ee.Geometry
     aoi = ee.Geometry(geometry.get('features')[0].get('geometry'))
 
     # Get relevant dates
-    dates, start_date, end_date, start_year_date = get_dates(request['date_text'])
+    dates, start_date, end_date, start_year_date = get_dates(request_json['date_text'])
 
     # Read ImageCollection
     dataset = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY') \
@@ -150,15 +169,15 @@ def fire_water_chart(request):
     # VIIRS fire alerts
     confidence = 'h' #'n', 'l'
 
-    if request['adm1']:
+    if request_json['adm1']:
         query =(f"SELECT alert__date, SUM(alert__count) AS alert__count \
-                FROM data WHERE iso = \'{request['iso']}\' AND adm1::integer = {request['adm1']} AND confidence__cat = \'{confidence}\' AND alert__date >= \'{start_date}\' AND alert__date <= \'{end_date}\' \
+                FROM data WHERE iso = \'{request_json['iso']}\' AND adm1::integer = {request_json['adm1']} AND confidence__cat = \'{confidence}\' AND alert__date >= \'{start_date}\' AND alert__date <= \'{end_date}\' \
                 GROUP BY iso, adm1, alert__date, confidence__cat \
                 ORDER BY alert__date"
         )
     else:
         query =(f"SELECT alert__date, SUM(alert__count) AS alert__count \
-                FROM data WHERE iso = \'{request['iso']}\' AND confidence__cat = \'{confidence}\' AND alert__date >= \'{start_date}\' AND alert__date <= \'{end_date}\' \
+                FROM data WHERE iso = \'{request_json['iso']}\' AND confidence__cat = \'{confidence}\' AND alert__date >= \'{start_date}\' AND alert__date <= \'{end_date}\' \
                 GROUP BY iso, alert__date, confidence__cat \
                 ORDER BY alert__date"
         )
@@ -185,4 +204,4 @@ def fire_water_chart(request):
     df_pre = df_pre[(df_pre['date'] >= start_year_date.strftime('%Y-%m-%d')) & (df_pre['date'] <= end_date.strftime('%Y-%m-%d'))]
     df_fire = df_fire[(df_fire['date'] >= start_year_date.strftime('%Y-%m-%d')) & (df_fire['date'] <= end_date.strftime('%Y-%m-%d'))]
 
-    return json.dumps(serializer(df_pre, df_fire))
+    return (json.dumps(serializer(df_pre, df_fire)), 200, headers)
