@@ -81,17 +81,18 @@ def get_dates(date_text=None):
             dt.datetime.strptime(date_text, '%Y-%m-%d')
         except ValueError:
             raise ValueError("Incorrect data format, should be YYYY-MM-DD")
-        end_date = pd.to_datetime(date_text)
+        date = pd.to_datetime(date_text)
 
     else:
-        end_date = pd.to_datetime('today').normalize()
+        date = pd.to_datetime('today').normalize()
 
-    nDays_year =  len(pd.date_range(end_date.replace(month=1, day=1) , end_date.replace(month=12, day=31) ,freq='D'))
-    start_year_date = end_date - dt.timedelta(days=nDays_year)
-    start_date = end_date - dt.timedelta(days=nDays_year+61)
+    nDays_year =  len(pd.date_range(date.replace(month=1, day=1) , date.replace(month=12, day=31) ,freq='D'))
+    start_year_date = date - dt.timedelta(days=nDays_year)
+    start_date = date - dt.timedelta(days=nDays_year+61)
+    end_date = date + dt.timedelta(days=61)
     dates = pd.date_range(start_date, end_date, freq='D').astype(str)
 
-    return dates, start_date, end_date, start_year_date
+    return dates, start_date, date, end_date, start_year_date
 
 def nestedMappedReducer(featureCol, imageCol):
     """
@@ -154,7 +155,7 @@ def fire_water_chart(request):
     aoi = ee.Geometry(geometry.get('features')[0].get('geometry'))
 
     # Get relevant dates
-    dates, start_date, end_date, start_year_date = get_dates(request_json['date_text'])
+    dates, start_date, date, end_date, start_year_date = get_dates(request_json['date_text'])
 
     # Read ImageCollection
     dataset = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY') \
@@ -188,10 +189,13 @@ def fire_water_chart(request):
     r = requests.get(url, params=sql)
 
     data = r.json().get('data')
-    df_fire = pd.DataFrame.from_dict(pd.json_normalize(data))
-    # Fill missing dates with 0
-    df_fire = df_fire.set_index('alert__date').reindex(dates, fill_value=0).reset_index().rename(columns={'index': 'alert__date'})
-    df_fire.rename(columns = {'alert__date': 'date', 'alert__count': 'fire'}, inplace= True)
+    if data: 
+        df_fire = pd.DataFrame.from_dict(pd.json_normalize(data))
+        # Fill missing dates with 0
+        df_fire = df_fire.set_index('alert__date').reindex(dates, fill_value=0).reset_index().rename(columns={'index': 'alert__date'})
+        df_fire.rename(columns = {'alert__date': 'date', 'alert__count': 'fire'}, inplace= True)
+    else:
+        df_fire = pd.DataFrame({"date": dates, 'fire': 0})
 
     # Moving averages
     # 1 week moving average
@@ -201,7 +205,7 @@ def fire_water_chart(request):
     df_pre['precipitation_2m'] = df_pre[['date', 'precipitation']].rolling(window=61, center=True).mean()
     df_fire['fire_2m'] = df_fire[['date', 'fire']].rolling(window=61, center=True).mean()
     # take current year days
-    df_pre = df_pre[(df_pre['date'] >= start_year_date.strftime('%Y-%m-%d')) & (df_pre['date'] <= end_date.strftime('%Y-%m-%d'))]
-    df_fire = df_fire[(df_fire['date'] >= start_year_date.strftime('%Y-%m-%d')) & (df_fire['date'] <= end_date.strftime('%Y-%m-%d'))]
+    df_pre = df_pre[(df_pre['date'] >= start_year_date.strftime('%Y-%m-%d')) & (df_pre['date'] <= date.strftime('%Y-%m-%d'))]
+    df_fire = df_fire[(df_fire['date'] >= start_year_date.strftime('%Y-%m-%d')) & (df_fire['date'] <= date.strftime('%Y-%m-%d'))]
 
     return (json.dumps(serializer(df_pre, df_fire)), 200, headers)
