@@ -1,0 +1,12 @@
+version:  '3.8'
+services:
+    mongabay-notebooks:
+      build:
+        context: ./data/notebooks
+        dockerfile: Dockerfile
+      volumes:
+        - ./data/data:/home/mambauser/data
+        - ./data/notebooks:/home/mambauser/notebooks
+      ports:
+        - 8887:8888
+      container_name: mongabay_jupyter_notebook
