@@ -82,6 +82,35 @@ uv add --dev <package>        # add a development-only dependency
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/); the
 `commit-msg` hook enforces this.
 
+## Layer pipelines
+
+Layers published to the Mongabay Mapbox account are configured in
+`src/data_processing/pipelines/layers.py`. Each pipeline downloads the source into `data/raw/`
+(cached between runs), tiles it into `data/processed/mbtiles/` and uploads it as a Mapbox
+tileset. Uploading needs `MAPBOX_USER` and `MAPBOX_TOKEN` in `.env`.
+
+``` bash
+uv run python -m data_processing.pipelines --list           # available layers
+uv run python -m data_processing.pipelines eez --no-upload  # tile only
+uv run python -m data_processing.pipelines eez              # tile and upload
+```
+
+To add a vector layer, add a config and register it in `LAYERS`:
+
+``` python
+MANGROVES = VectorLayer(
+    name="mangroves",  # Mapbox tileset name, at most 32 characters
+    title="Mangrove forests",
+    url="https://example.org/mangroves.zip",
+    source_file="mangroves.shp",  # file inside the zip
+    max_zoom=10,
+    fields=("name", "year"),  # attributes to keep
+)
+```
+
+Check each source's licence: most require attribution on the map (for example, the EEZ layer
+is Marine Regions, CC BY 4.0).
+
 ## Notebooks
 
 New work goes directly in `notebooks/`, starting from `notebooks/templates/` if useful.
