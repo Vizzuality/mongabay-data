@@ -12,6 +12,9 @@ Unreleased
 
 ### Added
 
+- `data_processing` base modules for publishing layers to Mapbox: download helpers, GeoDataFrame
+  clean-up, MBTiles and COG converters, and a Mapbox Uploads API client.
+
 ### Changed
 
 ### Fixed
