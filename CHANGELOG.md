@@ -13,7 +13,8 @@ Unreleased
 ### Added
 
 - `data_processing` base modules for publishing layers to Mapbox: download helpers, GeoDataFrame
-  clean-up, MBTiles and COG converters, and a Mapbox Uploads API client.
+  clean-up, MBTiles (vector and raster) and COG converters built on the GDAL 3.13 `gdal` CLI,
+  and a Mapbox Uploads API client.
 
 ### Changed
 

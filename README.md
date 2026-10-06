@@ -51,8 +51,10 @@ This creates `.venv`, installs every dependency at the versions pinned in `uv.lo
 installs `src/data_processing` in editable mode. There is no `sys.path` juggling: notebooks,
 tests and scripts can all `import data_processing` directly.
 
-Vector tiling (`data_processing.converters.mbtiles`) calls GDAL's `ogr2ogr`, which is a system
-dependency (`brew install gdal` on macOS).
+The converters in `data_processing.converters` (MBTiles and COG) call the unified `gdal`
+command, a system dependency that needs **GDAL 3.13 or newer** (`brew install gdal` on macOS;
+check with `gdal --version`). Upstream still marks this command as provisional, so a GDAL
+upgrade can change its syntax: all calls go through `converters/_gdal.py`.
 
 Install the git hooks:
 
