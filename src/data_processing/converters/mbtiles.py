@@ -13,39 +13,67 @@ _WEB_MERCATOR_BBOX = "-180,-85.0511287798066,180,85.0511287798066"
 
 
 def vector_to_mbtiles(
-    input_path: Path,
+    input_paths: Sequence[Path],
     output_path: Path,
     min_zoom: int = 0,
     max_zoom: int = 12,
     fields: Sequence[str] | None = None,
+    where: str | None = None,
+    labels: Sequence[str] | None = None,
     open_options: Sequence[str] = (),
 ) -> Path:
-    """Convert any OGR-readable vector file (GeoJSON, GPKG, SHP, ...) to MBTiles.
+    """Convert one or more OGR-readable vector files (GeoJSON, GPKG, SHP, ...) to MBTiles.
 
+    Several inputs are merged into a single tile layer, named after ``output_path``.
     Features are clipped to the Web Mercator latitude limits (vertices beyond them cannot be
     projected), invalid geometries are repaired, and tiles are kept under GDAL's default
-    500 KB, which is also the Mapbox limit. The tile layer is named after ``output_path``.
-    An existing ``output_path`` is replaced.
+    500 KB, which is also the Mapbox limit. An existing ``output_path`` is replaced.
 
     Args:
-        input_path: Vector file to convert.
+        input_paths: Vector files to convert.
         output_path: Destination ``.mbtiles`` file.
         min_zoom: Lowest zoom level to generate.
         max_zoom: Highest zoom level to generate.
         fields: Attributes to keep. ``None`` keeps all of them.
-        open_options: GDAL open options for the input, e.g. ``"ENCODING=ISO-8859-1"``.
+        where: Attribute filter, e.g. ``"STATUS = 'Designated'"``.
+        labels: One value per input, written to a ``type`` attribute. List ``"type"`` in
+            ``fields`` to keep it when selecting fields.
+        open_options: GDAL open options, e.g. ``"ENCODING=ISO-8859-1"``. Only supported with
+            a single input.
 
     Returns:
         The path of the generated MBTiles file.
 
     Raises:
+        ValueError: If ``labels`` does not match ``input_paths``, or ``open_options`` are
+            given with several inputs.
         RuntimeError: If ``gdal`` fails.
     """
+    if labels is not None and len(labels) != len(input_paths):
+        raise ValueError("labels must have one value per input")
+    if open_options and len(input_paths) > 1:
+        raise ValueError("open_options are only supported with a single input")
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    layer = output_path.stem
 
-    steps = ["!", "read", str(input_path)]
-    for option in open_options:
-        steps += ["--oo", option]
+    if len(input_paths) == 1 and labels is None:
+        steps = ["!", "read", str(input_paths[0])]
+        for option in open_options:
+            steps += ["--oo", option]
+    else:
+        steps = ["!", "concat", "--mode", "single", "--output-layer", layer]
+        if labels is not None:
+            steps += [
+                "--source-layer-field-name", "_source",
+                "--source-layer-field-content", "{DS_INDEX}",
+            ]  # fmt: skip
+        steps += [str(path) for path in input_paths]
+    if labels is not None:
+        cases = " ".join(f"WHEN '{i}' THEN '{label}'" for i, label in enumerate(labels))
+        statement = f'SELECT *, CASE _source {cases} END AS type FROM "{layer}"'
+        steps += ["!", "sql", "--dialect", "SQLITE", statement]
+    if where:
+        steps += ["!", "filter", "--where", where]
     steps += [
         "!", "clip", "--bbox", _WEB_MERCATOR_BBOX, "--bbox-crs", "EPSG:4326",
         "!", "make-valid", "--method", "structure",
@@ -55,7 +83,7 @@ def vector_to_mbtiles(
         steps += ["!", "select", "--fields", ",".join([*fields, "_ogr_geometry_"])]
     steps += [
         "!", "write", str(output_path), "--of", "MBTiles", "--overwrite",
-        "--output-layer", output_path.stem,
+        "--output-layer", layer,
         "--co", f"MINZOOM={min_zoom}",
         "--co", f"MAXZOOM={max_zoom}",
     ]  # fmt: skip
