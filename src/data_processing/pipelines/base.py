@@ -21,20 +21,61 @@ console = Console()
 
 
 @dataclass(frozen=True, kw_only=True)
+class Source:
+    """A downloadable dataset and the files to read from it.
+
+    Attributes:
+        url: Where to download the data. Zip archives, and zips nested one level inside
+            them, are extracted. Any other download is saved as ``files[0]``.
+        files: Glob patterns of the files to read, relative to the extracted download.
+        label: Value that identifies this source's features when a layer merges sources.
+    """
+
+    url: str
+    files: tuple[str, ...]
+    label: str | None = None
+
+    def fetch(self, dest: Path, refresh: bool = False) -> list[Path]:
+        """Download into ``dest`` unless already cached, and return the matching files."""
+        if not refresh and all(any(dest.glob(pattern)) for pattern in self.files):
+            console.print(f"Using cached {dest}")
+            return self._match(dest)
+
+        console.print(f"Downloading {self.url}")
+        download = download_file(self.url, dest / "download")
+        if zipfile.is_zipfile(download):
+            unzip(download, dest)
+            download.unlink()
+            for nested in list(dest.rglob("*.zip")):
+                unzip(nested)
+                nested.unlink()
+        else:
+            download.replace(dest / self.files[0])
+        return self._match(dest)
+
+    def _match(self, dest: Path) -> list[Path]:
+        paths = []
+        for pattern in self.files:
+            matches = sorted(dest.glob(pattern))
+            if not matches:
+                raise FileNotFoundError(f"{pattern} not found in the download from {self.url}")
+            paths += matches
+        return paths
+
+
+@dataclass(frozen=True, kw_only=True)
 class Layer(ABC):
-    """A source dataset published to Mapbox as one tileset.
+    """One or more source datasets published to Mapbox as one tileset.
 
     Attributes:
         name: Mapbox tileset name (``<account>.<name>``), also used for local file names.
         title: Display name in Mapbox Studio.
-        url: Where to download the source data. Zip archives are extracted.
-        source_file: File to process, relative to the extracted download.
+        sources: Datasets to download and read.
     """
 
     name: str
     title: str
-    url: str
-    source_file: str
+    sources: tuple[Source, ...]
 
     def __post_init__(self) -> None:
         validate_tileset_name(self.name)
@@ -47,28 +88,17 @@ class Layer(ABC):
     def mbtiles_path(self) -> Path:
         return MBTILES_DIR / f"{self.name}.mbtiles"
 
-    def fetch(self, refresh: bool = False) -> Path:
-        """Download the source unless it is already cached, and return the file to process."""
-        source = self.raw_dir / self.source_file
-        if source.exists() and not refresh:
-            console.print(f"Using cached {source}")
-            return source
-
-        console.print(f"Downloading {self.url}")
-        download = download_file(self.url, self.raw_dir / "download")
-        if zipfile.is_zipfile(download):
-            unzip(download, self.raw_dir)
-            download.unlink()
-        else:
-            download.replace(source)
-
-        if not source.exists():
-            raise FileNotFoundError(f"{self.source_file} not found in the download from {self.url}")
-        return source
+    def fetch(self, refresh: bool = False) -> list[tuple[Path, Source]]:
+        """Fetch every source and return each file to process with the source it came from."""
+        return [
+            (path, source)
+            for index, source in enumerate(self.sources)
+            for path in source.fetch(self.raw_dir / str(index), refresh=refresh)
+        ]
 
     @abstractmethod
-    def tile(self, source: Path) -> Path:
-        """Convert ``source`` into ``self.mbtiles_path``."""
+    def tile(self, files: list[tuple[Path, Source]]) -> Path:
+        """Convert the fetched ``files`` into ``self.mbtiles_path``."""
 
     def run(self, upload: bool = True, refresh: bool = False) -> Path:
         """Fetch, tile and optionally upload the layer. Returns the MBTiles path."""
@@ -94,21 +124,27 @@ class VectorLayer(Layer):
     Attributes:
         min_zoom: Lowest zoom level to generate.
         max_zoom: Highest zoom level to generate.
-        fields: Attributes to keep in the tiles. ``None`` keeps all of them.
+        fields: Attributes to keep in the tiles. ``None`` keeps all of them. Include ``"type"``
+            to keep the source labels.
+        where: Attribute filter, e.g. ``"STATUS = 'Designated'"``.
         open_options: GDAL open options for the source, e.g. ``("ENCODING=ISO-8859-1",)``.
     """
 
     min_zoom: int = 0
     max_zoom: int = 10
     fields: tuple[str, ...] | None = None
+    where: str | None = None
     open_options: tuple[str, ...] = ()
 
-    def tile(self, source: Path) -> Path:
+    def tile(self, files: list[tuple[Path, Source]]) -> Path:
+        labelled = any(source.label for _, source in files)
         return vector_to_mbtiles(
-            source,
+            [path for path, _ in files],
             self.mbtiles_path,
             min_zoom=self.min_zoom,
             max_zoom=self.max_zoom,
             fields=self.fields,
+            where=self.where,
+            labels=[source.label or "" for _, source in files] if labelled else None,
             open_options=self.open_options,
         )

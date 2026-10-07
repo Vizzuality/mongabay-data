@@ -17,6 +17,10 @@ Unreleased
   and a Mapbox Uploads API client.
 - Config-driven layer pipelines (`python -m data_processing.pipelines`) and the Exclusive
   Economic Zones layer (Marine Regions v12).
+- Layers built from several sources and files, with nested zip extraction, attribute filters
+  and source labels.
+- Marine Protected Areas (WDPA, October 2026) and Coral reefs (UNEP-WCMC warm-water and
+  cold-water corals) layers.
 
 ### Changed
 

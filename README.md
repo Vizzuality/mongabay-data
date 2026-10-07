@@ -101,15 +101,30 @@ To add a vector layer, add a config and register it in `LAYERS`:
 MANGROVES = VectorLayer(
     name="mangroves",  # Mapbox tileset name, at most 32 characters
     title="Mangrove forests",
-    url="https://example.org/mangroves.zip",
-    source_file="mangroves.shp",  # file inside the zip
+    sources=(
+        Source(
+            url="https://example.org/mangroves.zip",
+            files=("*/mangroves.shp",),  # glob patterns inside the extracted zip
+        ),
+    ),
     max_zoom=10,
     fields=("name", "year"),  # attributes to keep
+    where="year >= 2000",  # optional attribute filter
 )
 ```
 
-Check each source's licence: most require attribution on the map (for example, the EEZ layer
-is Marine Regions, CC BY 4.0).
+Every file matched by every source is merged into a single tile layer, named after the
+tileset. Zips nested inside the download are extracted too.
+When a layer merges several sources, give each one a `label` and list `"type"` in `fields`:
+each feature then gets a `type` attribute with its source label (see `CORAL_REEFS`, which
+labels features as `warm` or `cold`).
+
+Check each source's licence: most require attribution on the map. The EEZ layer is Marine
+Regions, CC BY 4.0. The WDPA and the UNEP-WCMC coral datasets are for **non-commercial** use
+only, must not be downloadable from the map, and need a visible citation with the release
+year and a link to [protectedplanet.net](https://www.protectedplanet.net) or
+[unep-wcmc.org](https://www.unep-wcmc.org). The WDPA licence also requires the latest
+monthly release, so update its URL in `layers.py` when publishing again.
 
 ## Notebooks
 
