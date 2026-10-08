@@ -21,6 +21,7 @@ Unreleased
   and source labels.
 - Marine Protected Areas (WDPA, October 2026) and Coral reefs (UNEP-WCMC warm-water and
   cold-water corals) layers.
+- Mangroves layer (Global Mangrove Watch v3.0, 2020 extent).
 
 ### Changed
 

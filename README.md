@@ -120,9 +120,9 @@ each feature then gets a `type` attribute with its source label (see `CORAL_REEF
 labels features as `warm` or `cold`).
 
 Check each source's licence: most require attribution on the map. The EEZ layer is Marine
-Regions, CC BY 4.0. The WDPA and the UNEP-WCMC coral datasets are for **non-commercial** use
-only, must not be downloadable from the map, and need a visible citation with the release
-year and a link to [protectedplanet.net](https://www.protectedplanet.net) or
+Regions, CC BY 4.0. Global Mangrove Watch v3.0 is CC BY 4.0: cite Bunting et al. (2022).
+The WDPA and the UNEP-WCMC coral datasets are for **non-commercial** use only, must not be
+downloadable from the map, and need a visible citation with the release year and a link to [protectedplanet.net](https://www.protectedplanet.net) or
 [unep-wcmc.org](https://www.unep-wcmc.org). The WDPA licence also requires the latest
 monthly release, so update its URL in `layers.py` when publishing again.
 

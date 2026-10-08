@@ -103,6 +103,19 @@ CORAL_REEFS = VectorLayer(
     ),
 )
 
+# Bunting et al. (2022), Global Mangrove Watch v3.0, Remote Sensing. CC BY 4.0.
+MANGROVES = VectorLayer(
+    name="mangroves",
+    title="Mangroves (Global Mangrove Watch v3.0, 2020)",
+    sources=(
+        Source(
+            url="https://zenodo.org/records/6894273/files/gmw_v3_2020_vec.zip?download=1",
+            files=("gmw_v3_2020_vec.shp",),
+        ),
+    ),
+    max_zoom=12,
+)
+
 LAYERS: dict[str, Layer] = {
-    layer.name: layer for layer in (EEZ, MARINE_PROTECTED_AREAS, CORAL_REEFS)
+    layer.name: layer for layer in (EEZ, MARINE_PROTECTED_AREAS, CORAL_REEFS, MANGROVES)
 }
