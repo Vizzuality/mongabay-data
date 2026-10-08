@@ -15,6 +15,16 @@ from rich.progress import Progress
 UPLOADS_API = "https://api.mapbox.com/uploads/v1"
 REQUEST_TIMEOUT = 30
 TILESET_NAME_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,32}")
+# Mapbox rejects display names with punctuation such as brackets or commas.
+DISPLAY_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9 _-]+")
+
+
+def _raise_for_status(response: requests.Response) -> None:
+    """Raise with Mapbox's error message, leaving out the URL, which carries the token."""
+    if not response.ok:
+        raise requests.HTTPError(
+            f"Mapbox answered {response.status_code}: {response.text}", response=response
+        )
 
 
 def validate_tileset_name(tileset: str) -> None:
@@ -35,7 +45,7 @@ def get_s3_credentials(username: str, token: str) -> dict:
         params={"access_token": token},
         timeout=REQUEST_TIMEOUT,
     )
-    response.raise_for_status()
+    _raise_for_status(response)
     return response.json()
 
 
@@ -62,7 +72,7 @@ def create_upload(username: str, token: str, credentials: dict, tileset: str, na
         json={"url": credentials["url"], "tileset": f"{username}.{tileset}", "name": name},
         timeout=REQUEST_TIMEOUT,
     )
-    response.raise_for_status()
+    _raise_for_status(response)
     return response.json()["id"]
 
 
@@ -91,7 +101,7 @@ def wait_for_upload(
                 params={"access_token": token},
                 timeout=REQUEST_TIMEOUT,
             )
-            response.raise_for_status()
+            _raise_for_status(response)
             status = response.json()
 
             if status["error"]:
@@ -120,13 +130,15 @@ def upload_tileset(
         tileset: Tileset name without the ``username.`` prefix.
         username: Mapbox account name.
         token: Mapbox secret token with the ``uploads:write`` scope.
-        name: Display name in Mapbox Studio. Defaults to ``tileset``.
+        name: Display name in Mapbox Studio. Defaults to ``tileset``. Characters other than
+            letters, digits, spaces, ``-`` and ``_`` are replaced with spaces.
 
     Returns:
         The final upload status.
     """
     validate_tileset_name(tileset)
+    display_name = " ".join(DISPLAY_NAME_UNSAFE.sub(" ", name or tileset).split())
     credentials = get_s3_credentials(username, token)
     upload_to_staging(source, credentials)
-    upload_id = create_upload(username, token, credentials, tileset, name or tileset)
+    upload_id = create_upload(username, token, credentials, tileset, display_name)
     return wait_for_upload(username, token, upload_id)
