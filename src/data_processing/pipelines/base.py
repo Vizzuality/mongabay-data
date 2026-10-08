@@ -237,7 +237,8 @@ class ClassifiedRasterLayer(Layer):
     Each source tile is downloaded, polygonized once per zoom band and deleted, by
     ``workers`` tiles at a time, so the full raster is never on disk. Tiles already
     polygonized are skipped, so an interrupted run resumes where it stopped. Each polygon
-    gets ``level``, the lower bound of its bin, and ``class``, the bin's label.
+    gets ``level``, the lower bound of its bin, and ``class``, the bin's label. The polygons
+    are deleted once the MBTiles is built.
 
     A copy of each tile averaged to ``coarse_resolution`` is kept. Bands at that resolution
     or coarser are polygonized from it, so changing their settings needs no new download.
@@ -265,6 +266,10 @@ class ClassifiedRasterLayer(Layer):
     def polygons_dir(self) -> Path:
         return POLYGONS_DIR / self.name
 
+    @property
+    def coarse_dir(self) -> Path:
+        return self.polygons_dir / f"coarse_{self.coarse_resolution:g}deg"
+
     def fetch(self, refresh: bool = False) -> list[tuple[Path, Source]]:
         """Nothing is fetched up front: ``tile`` downloads the tiles one at a time."""
         if refresh:
@@ -290,7 +295,12 @@ class ClassifiedRasterLayer(Layer):
             ThreadPoolExecutor(len(self.bands)) as pool,
         ):
             bands = list(pool.map(lambda band: self._tile_band(band, Path(tmp)), self.bands))
-            return merge_mbtiles(bands, self.mbtiles_path)
+            mbtiles = merge_mbtiles(bands, self.mbtiles_path)
+        # The polygons are only needed to build the MBTiles; the coarse copies are kept.
+        for path in self.polygons_dir.iterdir():
+            if path != self.coarse_dir:
+                shutil.rmtree(path)
+        return mbtiles
 
     def _polygons_path(self, band: ZoomBand, tile: str) -> Path:
         return self.polygons_dir / band.name / f"{tile}.gpkg"
@@ -305,7 +315,7 @@ class ClassifiedRasterLayer(Layer):
         ]
         if not missing:
             return
-        coarse = self.polygons_dir / f"coarse_{self.coarse_resolution:g}deg" / f"{tile}.tif"
+        coarse = self.coarse_dir / f"{tile}.tif"
         fine = [band for band in missing if band.resolution < self.coarse_resolution]
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=self.raw_dir) as tmp:
