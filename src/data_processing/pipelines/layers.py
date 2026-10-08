@@ -1,12 +1,12 @@
 """Layers published to the Mongabay Mapbox account. Add a config here to add a layer."""
 
-from .base import ArcGISTileListSource
-from .base import ClassifiedRasterLayer
 from .base import Layer
-from .base import Source
-from .base import TileListSource
-from .base import VectorLayer
-from .base import ZoomBand
+from .raster import ClassifiedRasterLayer
+from .raster import ZoomBand
+from .sources import ArcGISTileIndex
+from .sources import Source
+from .sources import TextTileIndex
+from .vector import VectorLayer
 
 MARINE_REGIONS_WFS = "https://geo.vliz.be/geoserver/MarineRegions/wfs"
 
@@ -134,10 +134,8 @@ FOREST_BANDS = (
 TREE_COVER_2000 = ClassifiedRasterLayer(
     name="tree_cover_2000",
     title="Tree cover 2000 (Hansen/UMD/Google/USGS/NASA)",
-    sources=(
-        TileListSource(
-            url="https://storage.googleapis.com/earthenginepartners-hansen/GFC2015/treecover2000.txt"
-        ),
+    index=TextTileIndex(
+        url="https://storage.googleapis.com/earthenginepartners-hansen/GFC2015/treecover2000.txt"
     ),
     # Canopy density, %.
     classes=((10, "10-30"), (30, "30-50"), (50, "50-75"), (75, "75-100")),
@@ -150,15 +148,13 @@ TREE_COVER_2000 = ClassifiedRasterLayer(
 TREE_BIOMASS_DENSITY = ClassifiedRasterLayer(
     name="tree_biomass_density",
     title="Aboveground live woody biomass density 2000 (WHRC)",
-    sources=(
-        ArcGISTileListSource(
-            url=(
-                "https://services2.arcgis.com/g8WusZB13b9OegfU/arcgis/rest/services/"
-                "Aboveground_Live_Woody_Biomass_Density/FeatureServer/0"
-            ),
-            name_field="tile_id",
-            url_field="Mg_ha_1_download",
+    index=ArcGISTileIndex(
+        url=(
+            "https://services2.arcgis.com/g8WusZB13b9OegfU/arcgis/rest/services/"
+            "Aboveground_Live_Woody_Biomass_Density/FeatureServer/0"
         ),
+        name_field="tile_id",
+        url_field="Mg_ha_1_download",
     ),
     # Biomass, Mg/ha.
     classes=(

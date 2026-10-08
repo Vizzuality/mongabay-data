@@ -7,6 +7,7 @@ import argparse
 
 from dotenv import load_dotenv
 
+from ..mapbox import MapboxAccount
 from .layers import LAYERS
 
 
@@ -17,9 +18,10 @@ def main() -> None:
     )
     parser.add_argument("layers", nargs="*", choices=sorted(LAYERS), metavar="layer")
     parser.add_argument("--list", action="store_true", help="list the available layers")
-    parser.add_argument("--no-upload", action="store_true", help="tile only, skip Mapbox")
     parser.add_argument("--refresh", action="store_true", help="download the source again")
-    parser.add_argument(
+    upload = parser.add_mutually_exclusive_group()
+    upload.add_argument("--no-upload", action="store_true", help="tile only, skip Mapbox")
+    upload.add_argument(
         "--upload-only", action="store_true", help="upload the existing MBTiles, skip tiling"
     )
     args = parser.parse_args()
@@ -30,11 +32,12 @@ def main() -> None:
         return
 
     load_dotenv()
+    account = None if args.no_upload else MapboxAccount.from_env()
     for name in args.layers:
         if args.upload_only:
-            LAYERS[name].upload()
+            LAYERS[name].upload(account)
         else:
-            LAYERS[name].run(upload=not args.no_upload, refresh=args.refresh)
+            LAYERS[name].run(account, refresh=args.refresh)
 
 
 if __name__ == "__main__":

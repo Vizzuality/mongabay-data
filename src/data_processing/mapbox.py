@@ -4,8 +4,11 @@ See https://docs.mapbox.com/api/maps/uploads/. The token must be a secret token 
 ``uploads:write`` scope.
 """
 
+import os
 import re
 import time
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 
 import boto3
@@ -17,6 +20,31 @@ REQUEST_TIMEOUT = 30
 TILESET_NAME_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,32}")
 # Mapbox rejects display names with punctuation such as brackets or commas.
 DISPLAY_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9 _-]+")
+
+
+@dataclass(frozen=True, kw_only=True)
+class MapboxAccount:
+    """The Mapbox account that tilesets are uploaded to.
+
+    Attributes:
+        username: Mapbox account name, the ``username`` in ``username.tileset``.
+        token: Secret token with the ``uploads:write`` scope.
+    """
+
+    username: str
+    token: str = field(repr=False)
+
+    @classmethod
+    def from_env(cls) -> "MapboxAccount":
+        """Read the account from the ``MAPBOX_USER`` and ``MAPBOX_TOKEN`` variables.
+
+        Raises:
+            RuntimeError: If either variable is missing or empty.
+        """
+        values = {key: os.environ.get(key) for key in ("MAPBOX_USER", "MAPBOX_TOKEN")}
+        if missing := [key for key, value in values.items() if not value]:
+            raise RuntimeError(f"Set {' and '.join(missing)} in .env to upload to Mapbox")
+        return cls(username=values["MAPBOX_USER"], token=values["MAPBOX_TOKEN"])
 
 
 def _raise_for_status(response: requests.Response) -> None:
@@ -119,8 +147,7 @@ def wait_for_upload(
 def upload_tileset(
     source: Path,
     tileset: str,
-    username: str,
-    token: str,
+    account: MapboxAccount,
     name: str | None = None,
 ) -> dict:
     """Upload ``source`` to Mapbox as ``username.tileset`` and wait until it is ready.
@@ -128,8 +155,7 @@ def upload_tileset(
     Args:
         source: File to upload (``.mbtiles``, ``.tif``, ``.geojson``, ...).
         tileset: Tileset name without the ``username.`` prefix.
-        username: Mapbox account name.
-        token: Mapbox secret token with the ``uploads:write`` scope.
+        account: Account to upload to.
         name: Display name in Mapbox Studio. Defaults to ``tileset``. Characters other than
             letters, digits, spaces, ``-`` and ``_`` are replaced with spaces.
 
@@ -138,6 +164,7 @@ def upload_tileset(
     """
     validate_tileset_name(tileset)
     display_name = " ".join(DISPLAY_NAME_UNSAFE.sub(" ", name or tileset).split())
+    username, token = account.username, account.token
     credentials = get_s3_credentials(username, token)
     upload_to_staging(source, credentials)
     upload_id = create_upload(username, token, credentials, tileset, display_name)

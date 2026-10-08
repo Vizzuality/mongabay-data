@@ -129,7 +129,7 @@ and `class`, its label, for `match` expressions:
 TREE_COVER_2000 = ClassifiedRasterLayer(
     name="tree_cover_2000",
     title="Tree cover 2000",
-    sources=(TileListSource(url="https://example.org/tiles.txt"),),  # one tile URL per line
+    index=TextTileIndex(url="https://example.org/tiles.txt"),  # one tile URL per line
     classes=((10, "10-30"), (30, "30-50"), (50, "50-75"), (75, "75-100")),
     max_value=100,  # upper bound of the last bin
     bands=FOREST_BANDS,  # a resampling grid and sieve per zoom range
