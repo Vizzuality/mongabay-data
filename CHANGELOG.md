@@ -22,6 +22,8 @@ Unreleased
 - Marine Protected Areas (WDPA, October 2026) and Coral reefs (UNEP-WCMC warm-water and
   cold-water corals) layers.
 - Mangroves layer (Global Mangrove Watch v3.0, 2020 extent).
+- Classified raster layers, published as polygons by zoom band and processed tile by tile in
+  parallel, and the Tree cover 2000 (Hansen) and Tree biomass density (WHRC) layers.
 
 ### Changed
 

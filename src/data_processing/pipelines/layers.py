@@ -1,8 +1,12 @@
 """Layers published to the Mongabay Mapbox account. Add a config here to add a layer."""
 
+from .base import ArcGISTileListSource
+from .base import ClassifiedRasterLayer
 from .base import Layer
 from .base import Source
+from .base import TileListSource
 from .base import VectorLayer
+from .base import ZoomBand
 
 MARINE_REGIONS_WFS = "https://geo.vliz.be/geoserver/MarineRegions/wfs"
 
@@ -116,6 +120,67 @@ MANGROVES = VectorLayer(
     max_zoom=12,
 )
 
+FOREST_BANDS = (
+    ZoomBand(min_zoom=0, max_zoom=0, resolution=0.2, sieve=2),
+    ZoomBand(min_zoom=1, max_zoom=2, resolution=0.1, sieve=2),
+    ZoomBand(min_zoom=3, max_zoom=3, resolution=0.08, sieve=2),
+    ZoomBand(min_zoom=4, max_zoom=4, resolution=0.04, sieve=2),
+    ZoomBand(min_zoom=5, max_zoom=7, resolution=0.016, sieve=4),
+    ZoomBand(min_zoom=8, max_zoom=9, resolution=0.004, sieve=8),
+    ZoomBand(min_zoom=10, max_zoom=10, resolution=0.002, sieve=16),
+)
+
+# Hansen et al. (2013), Science. Global Forest Change v1.2, tree cover 2000. CC BY 4.0.
+TREE_COVER_2000 = ClassifiedRasterLayer(
+    name="tree_cover_2000",
+    title="Tree cover 2000 (Hansen/UMD/Google/USGS/NASA)",
+    sources=(
+        TileListSource(
+            url="https://storage.googleapis.com/earthenginepartners-hansen/GFC2015/treecover2000.txt"
+        ),
+    ),
+    # Canopy density, %.
+    classes=((10, "10-30"), (30, "30-50"), (50, "50-75"), (75, "75-100")),
+    max_value=100,
+    bands=FOREST_BANDS,
+)
+
+# Harris et al. (2021), Nature Climate Change. WHRC aboveground live woody biomass density
+# 2000, v1.4. CC BY 4.0.
+TREE_BIOMASS_DENSITY = ClassifiedRasterLayer(
+    name="tree_biomass_density",
+    title="Aboveground live woody biomass density 2000 (WHRC)",
+    sources=(
+        ArcGISTileListSource(
+            url=(
+                "https://services2.arcgis.com/g8WusZB13b9OegfU/arcgis/rest/services/"
+                "Aboveground_Live_Woody_Biomass_Density/FeatureServer/0"
+            ),
+            name_field="tile_id",
+            url_field="Mg_ha_1_download",
+        ),
+    ),
+    # Biomass, Mg/ha.
+    classes=(
+        (1, "1-80"),
+        (80, "80-160"),
+        (160, "160-240"),
+        (240, "240-320"),
+        (320, "320-400"),
+        (400, "400+"),
+    ),
+    max_value=65535,  # the UInt16 maximum: the last bin is open-ended
+    bands=FOREST_BANDS,
+)
+
 LAYERS: dict[str, Layer] = {
-    layer.name: layer for layer in (EEZ, MARINE_PROTECTED_AREAS, CORAL_REEFS, MANGROVES)
+    layer.name: layer
+    for layer in (
+        EEZ,
+        MARINE_PROTECTED_AREAS,
+        CORAL_REEFS,
+        MANGROVES,
+        TREE_COVER_2000,
+        TREE_BIOMASS_DENSITY,
+    )
 }

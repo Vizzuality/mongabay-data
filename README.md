@@ -119,8 +119,26 @@ When a layer merges several sources, give each one a `label` and list `"type"` i
 each feature then gets a `type` attribute with its source label (see `CORAL_REEFS`, which
 labels features as `warm` or `cold`).
 
+Rasters that need to be vectorized for uploading them to Mapbox, are published as polygons instead:
+a `ClassifiedRasterLayer` classifies the raster into value bins and polygonizes each bin.
+Each polygon gets `level`, the lower bound of its bin, for `step` or `interpolate` colour ramps,
+and `class`, its label, for `match` expressions:
+
+``` python
+TREE_COVER_2000 = ClassifiedRasterLayer(
+    name="tree_cover_2000",
+    title="Tree cover 2000",
+    sources=(TileListSource(url="https://example.org/tiles.txt"),),  # one tile URL per line
+    classes=((10, "10-30"), (30, "30-50"), (50, "50-75"), (75, "75-100")),
+    max_value=100,  # upper bound of the last bin
+    bands=FOREST_BANDS,  # a resampling grid and sieve per zoom range
+)
+```
+
 Check each source's licence: most require attribution on the map. The EEZ layer is Marine
 Regions, CC BY 4.0. Global Mangrove Watch v3.0 is CC BY 4.0: cite Bunting et al. (2022).
+Tree cover 2000 is CC BY 4.0: cite Hansen et al. (2013). Tree biomass density is CC BY 4.0:
+cite Harris et al. (2021).
 The WDPA and the UNEP-WCMC coral datasets are for **non-commercial** use only, must not be
 downloadable from the map, and need a visible citation with the release year and a link to [protectedplanet.net](https://www.protectedplanet.net) or
 [unep-wcmc.org](https://www.unep-wcmc.org). The WDPA licence also requires the latest
