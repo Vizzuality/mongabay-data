@@ -186,15 +186,21 @@ class Layer(ABC):
         mbtiles = self.tile(self.fetch(refresh=refresh))
         console.print(f"Tiled to {mbtiles}")
         if upload:
-            upload_tileset(
-                mbtiles,
-                self.name,
-                username=os.environ["MAPBOX_USER"],
-                token=os.environ["MAPBOX_TOKEN"],
-                name=self.title,
-            )
-            console.print(f"Uploaded as {os.environ['MAPBOX_USER']}.{self.name}")
+            self.upload()
         return mbtiles
+
+    def upload(self) -> None:
+        """Upload the existing ``mbtiles_path`` to Mapbox, replacing the tileset if it exists."""
+        if not self.mbtiles_path.exists():
+            raise FileNotFoundError(f"{self.mbtiles_path} not found: run the layer first")
+        upload_tileset(
+            self.mbtiles_path,
+            self.name,
+            username=os.environ["MAPBOX_USER"],
+            token=os.environ["MAPBOX_TOKEN"],
+            name=self.title,
+        )
+        console.print(f"Uploaded as {os.environ['MAPBOX_USER']}.{self.name}")
 
 
 @dataclass(frozen=True, kw_only=True)

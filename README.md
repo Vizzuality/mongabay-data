@@ -93,6 +93,7 @@ tileset. Uploading needs `MAPBOX_USER` and `MAPBOX_TOKEN` in `.env`.
 uv run python -m data_processing.pipelines --list           # available layers
 uv run python -m data_processing.pipelines eez --no-upload  # tile only
 uv run python -m data_processing.pipelines eez              # tile and upload
+uv run python -m data_processing.pipelines eez --upload-only  # upload the existing MBTiles
 ```
 
 To add a vector layer, add a config and register it in `LAYERS`:

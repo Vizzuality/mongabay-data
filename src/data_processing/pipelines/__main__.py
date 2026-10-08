@@ -1,4 +1,7 @@
-"""Run layer pipelines: ``python -m data_processing.pipelines <layer>... [--no-upload]``."""
+"""Run layer pipelines: ``python -m data_processing.pipelines <layer>... [--no-upload]``.
+
+``--upload-only`` uploads the MBTiles built by an earlier run without tiling again.
+"""
 
 import argparse
 
@@ -16,6 +19,9 @@ def main() -> None:
     parser.add_argument("--list", action="store_true", help="list the available layers")
     parser.add_argument("--no-upload", action="store_true", help="tile only, skip Mapbox")
     parser.add_argument("--refresh", action="store_true", help="download the source again")
+    parser.add_argument(
+        "--upload-only", action="store_true", help="upload the existing MBTiles, skip tiling"
+    )
     args = parser.parse_args()
 
     if args.list or not args.layers:
@@ -25,7 +31,10 @@ def main() -> None:
 
     load_dotenv()
     for name in args.layers:
-        LAYERS[name].run(upload=not args.no_upload, refresh=args.refresh)
+        if args.upload_only:
+            LAYERS[name].upload()
+        else:
+            LAYERS[name].run(upload=not args.no_upload, refresh=args.refresh)
 
 
 if __name__ == "__main__":
