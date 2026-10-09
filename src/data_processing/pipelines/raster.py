@@ -1,4 +1,4 @@
-"""Layers built by classifying tiled rasters into polygons, like Mapbox's landcover."""
+"""Layers built from rasters: classified into polygons, or shaded into hillshade tiles."""
 
 import shutil
 import tempfile
@@ -10,6 +10,7 @@ from rich import get_console
 
 from ..config import MBTILES_DIR
 from ..config import POLYGONS_DIR
+from ..converters.hillshade import dem_to_hillshade
 from ..converters.mbtiles import merge_mbtiles
 from ..converters.mbtiles import vector_to_mbtiles
 from ..converters.polygons import classify_to_polygons
@@ -17,6 +18,7 @@ from ..converters.polygons import resample
 from ..converters.polygons import unset_nodata
 from ..download import download_file
 from .base import Layer
+from .sources import Source
 from .sources import TileIndex
 
 
@@ -202,4 +204,33 @@ class ClassifiedRasterLayer(Layer):
             min_zoom=band.min_zoom,
             max_zoom=band.max_zoom,
             layer_name=self.name,
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class HillshadeLayer(Layer):
+    """An elevation raster shaded into transparent hillshade tiles.
+
+    Black shadows and white highlights over transparency, styled in Mapbox Studio as a raster
+    layer (opacity, brightness, contrast).
+
+    Attributes:
+        source: Elevation rasters in metres, mosaicked together.
+        max_zoom: Highest zoom level of the 512 px tiles; Mapbox overzooms above it.
+        max_height: Heights above it are flat and transparent, such as 0 for the seafloor only.
+        exaggeration: Vertical exaggeration at ``max_zoom``, raised when zoomed out.
+    """
+
+    source: Source
+    max_zoom: int
+    max_height: float | None = None
+    exaggeration: float = 1.0
+
+    def build(self, refresh: bool = False) -> Path:
+        return dem_to_hillshade(
+            self.source.fetch(self.raw_dir, refresh=refresh),
+            self.mbtiles_path,
+            max_zoom=self.max_zoom,
+            max_height=self.max_height,
+            exaggeration=self.exaggeration,
         )

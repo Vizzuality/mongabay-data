@@ -136,10 +136,14 @@ TREE_COVER_2000 = ClassifiedRasterLayer(
 )
 ```
 
+Elevation rasters are published as a `HillshadeLayer`: transparent tiles with black shadows
+and white highlights, shaded per zoom so relief stays visible when zoomed out.
+
 Check each source's licence: most require attribution on the map. The EEZ layer is Marine
 Regions, CC BY 4.0. Global Mangrove Watch v3.0 is CC BY 4.0: cite Bunting et al. (2022).
 Tree cover 2000 is CC BY 4.0: cite Hansen et al. (2013). Tree biomass density is CC BY 4.0:
-cite Harris et al. (2021).
+cite Harris et al. (2021). The GEBCO grid is public domain: cite the GEBCO Compilation Group
+(2026).
 The WDPA and the UNEP-WCMC coral datasets are for **non-commercial** use only, must not be
 downloadable from the map, and need a visible citation with the release year and a link to [protectedplanet.net](https://www.protectedplanet.net) or
 [unep-wcmc.org](https://www.unep-wcmc.org). The WDPA licence also requires the latest

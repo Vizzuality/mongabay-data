@@ -2,6 +2,7 @@
 
 from .base import Layer
 from .raster import ClassifiedRasterLayer
+from .raster import HillshadeLayer
 from .raster import ZoomBand
 from .sources import ArcGISTileIndex
 from .sources import Source
@@ -169,6 +170,25 @@ TREE_BIOMASS_DENSITY = ClassifiedRasterLayer(
     bands=FOREST_BANDS,
 )
 
+# GEBCO Compilation Group (2026), GEBCO_2026 Grid, doi:10.5285/4f68d5c7-45eb-f999-e063-7086abc036fa.
+# Public domain, with attribution.
+OCEAN_HILLSHADE = HillshadeLayer(
+    name="ocean_hillshade",
+    title="Ocean hillshade (GEBCO 2026)",
+    source=Source(
+        url=(
+            "https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2026/ice_surface_elevation/"
+            "geotiff/gebco_2026_geotiff.zip?download=1"
+        ),
+        files=("*.tif",),
+    ),
+    # 512 px tiles at z7 are about 300 m per pixel at the equator, finer than GEBCO's 460 m.
+    max_zoom=7,
+    # Land and ice shelves are transparent, so only the seafloor is shaded.
+    max_height=0,
+    exaggeration=2,
+)
+
 LAYERS: dict[str, Layer] = {
     layer.name: layer
     for layer in (
@@ -178,5 +198,6 @@ LAYERS: dict[str, Layer] = {
         MANGROVES,
         TREE_COVER_2000,
         TREE_BIOMASS_DENSITY,
+        OCEAN_HILLSHADE,
     )
 }

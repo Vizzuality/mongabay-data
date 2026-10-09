@@ -24,6 +24,8 @@ Unreleased
 - Mangroves layer (Global Mangrove Watch v3.0, 2020 extent).
 - Classified raster layers, published as polygons by zoom band and processed tile by tile in
   parallel, and the Tree cover 2000 (Hansen) and Tree biomass density (WHRC) layers.
+- Hillshade layers shaded per zoom from elevation rasters, and the Ocean hillshade layer
+  (GEBCO 2026).
 
 ### Changed
 
