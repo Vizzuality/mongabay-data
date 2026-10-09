@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+from PIL import ImageColor
 
 from ._gdal import run_gdal
 
@@ -30,15 +31,17 @@ def dem_to_hillshade(
     min_zoom: int = 0,
     max_height: float | None = None,
     exaggeration: float = 1.0,
+    shadow_color: str = "#000000",
+    highlight_color: str = "#ffffff",
     workers: int = 4,
 ) -> Path:
     """Shade elevation rasters into an MBTiles of transparent PNGs ready to upload to Mapbox.
 
-    Slopes facing away from the light are black and slopes facing it are white, each more
-    opaque the steeper they are. Flat ground is transparent, so the tiles shade any colour
-    below them. Each zoom is shaded from the source resampled to that zoom, so relief stays
-    visible when zoomed out. ``output_path`` only appears once complete; an existing one is
-    replaced.
+    Slopes facing away from the light get ``shadow_color`` and slopes facing it get
+    ``highlight_color``, each more opaque the steeper they are. Flat ground is transparent,
+    so the tiles shade any colour below them. Each zoom is shaded from the source resampled
+    to that zoom, so relief stays visible when zoomed out. ``output_path`` only appears once
+    complete; an existing one is replaced.
 
     Args:
         dem_paths: Elevation rasters in metres, mosaicked together.
@@ -49,6 +52,8 @@ def dem_to_hillshade(
             only the seafloor. Tiles that are entirely above it are left out.
         exaggeration: Vertical exaggeration at ``max_zoom``. It doubles every two zooms out,
             because the same relief spans fewer, larger pixels there.
+        shadow_color: Colour of shaded slopes, such as ``"#001436"``.
+        highlight_color: Colour of lit slopes, such as ``"#016AFE"``.
         workers: Number of tile rows processed at the same time.
 
     Returns:
@@ -58,6 +63,7 @@ def dem_to_hillshade(
         RuntimeError: If ``gdal`` fails.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    colors = (ImageColor.getrgb(shadow_color), ImageColor.getrgb(highlight_color))
     with tempfile.TemporaryDirectory(dir=output_path.parent) as tmp:
         dem = Path(tmp) / "dem.vrt"
         # Tiles of one grid can differ in resolution by rounding noise, which "same" rejects.
@@ -72,7 +78,7 @@ def dem_to_hillshade(
             with ThreadPoolExecutor(workers) as pool:
                 for tiles in pool.map(
                     lambda row, zoom=zoom, z=zoom_exaggeration: _shade_row(
-                        dem, zoom, row, max_height, z, Path(tmp)
+                        dem, zoom, row, max_height, z, colors, Path(tmp)
                     ),
                     range(2**zoom),
                 ):
@@ -85,7 +91,13 @@ def dem_to_hillshade(
 
 
 def _shade_row(
-    dem: Path, zoom: int, row: int, max_height: float | None, exaggeration: float, tmp: Path
+    dem: Path,
+    zoom: int,
+    row: int,
+    max_height: float | None,
+    exaggeration: float,
+    colors: tuple[tuple[int, ...], tuple[int, ...]],
+    tmp: Path,
 ) -> list[tuple[int, int, int, bytes]]:
     """Resample one row of tiles from ``dem`` and shade its tiles."""
     count = 2**zoom
@@ -115,7 +127,7 @@ def _shade_row(
     # Web Mercator stretches distances by 1 / cos(latitude); shade with true ground distances.
     y = top + pixel / 2 - pixel * np.arange(-1, TILE_SIZE + 1)
     ground = pixel * np.cos(np.arctan(np.sinh(y / _RADIUS)))[:, None]
-    shading = _shade(heights, ground, exaggeration)[1:-1]
+    shading = _shade(heights, ground, exaggeration, colors)[1:-1]
     flat = flat[1:-1]
 
     tiles = []
@@ -131,8 +143,13 @@ def _shade_row(
     return tiles
 
 
-def _shade(heights: np.ndarray, ground: np.ndarray, exaggeration: float) -> np.ndarray:
-    """Shade heights into RGBA: black shadows and white highlights over transparency."""
+def _shade(
+    heights: np.ndarray,
+    ground: np.ndarray,
+    exaggeration: float,
+    colors: tuple[tuple[int, ...], tuple[int, ...]],
+) -> np.ndarray:
+    """Shade heights into RGBA: ``(shadow, highlight)`` colours over transparency."""
     dz_south, dz_east = np.gradient(heights * exaggeration)
     dz_dx = dz_east / ground
     dz_dy = -dz_south / ground  # rows run south, so flip to get the slope towards the north
@@ -146,9 +163,9 @@ def _shade(heights: np.ndarray, ground: np.ndarray, exaggeration: float) -> np.n
     flat = math.sin(_ALTITUDE)
     shadow = np.clip((flat - light) / flat, 0, 1)
     highlight = np.clip((light - flat) / (1 - flat), 0, 1)
-    white = highlight > shadow
+    lit = (highlight > shadow)[..., None]
     rgba = np.zeros((*heights.shape, 4))
-    rgba[..., :3] = np.where(white, 255, 0)[..., None]
+    rgba[..., :3] = np.where(lit, colors[1], colors[0])
     rgba[..., 3] = np.rint(255 * np.maximum(shadow, highlight))
     return rgba
 
