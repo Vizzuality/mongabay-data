@@ -5,6 +5,7 @@ description = "Data processing and analysis for the Mongabay project family"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
+    "boto3>=1.43.108",
     "geopandas>=1.0.1",
     "ipykernel>=6.29.5",
     "jupyterlab>=4.3.0",
@@ -13,6 +14,7 @@ dependencies = [
     "pandas>=2.2.3",
     "python-dotenv>=1.0.1",
     "requests>=2.32.3",
+    "rich>=15.0.0",
     "seaborn>=0.13.2",
 ]
 

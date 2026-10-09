@@ -51,6 +51,11 @@ This creates `.venv`, installs every dependency at the versions pinned in `uv.lo
 installs `src/data_processing` in editable mode. There is no `sys.path` juggling: notebooks,
 tests and scripts can all `import data_processing` directly.
 
+The converters in `data_processing.converters` (MBTiles and COG) call the unified `gdal`
+command, a system dependency that needs **GDAL 3.13 or newer** (`brew install gdal` on macOS;
+check with `gdal --version`). Upstream still marks this command as provisional, so a GDAL
+upgrade can change its syntax: all calls go through `converters/_gdal.py`.
+
 Install the git hooks:
 
 ``` bash
@@ -76,6 +81,73 @@ uv add --dev <package>        # add a development-only dependency
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/); the
 `commit-msg` hook enforces this.
+
+## Layer pipelines
+
+Layers published to the Mongabay Mapbox account are configured in
+`src/data_processing/pipelines/layers.py`. Each pipeline downloads the source into `data/raw/`
+(cached between runs), tiles it into `data/processed/mbtiles/` and uploads it as a Mapbox
+tileset. Uploading needs `MAPBOX_USER` and `MAPBOX_TOKEN` in `.env`.
+
+``` bash
+uv run python -m data_processing.pipelines --list           # available layers
+uv run python -m data_processing.pipelines eez --no-upload  # tile only
+uv run python -m data_processing.pipelines eez              # tile and upload
+uv run python -m data_processing.pipelines eez --upload-only  # upload the existing MBTiles
+```
+
+To add a vector layer, add a config and register it in `LAYERS`:
+
+``` python
+MANGROVES = VectorLayer(
+    name="mangroves",  # Mapbox tileset name, at most 32 characters
+    title="Mangrove forests",
+    sources=(
+        Source(
+            url="https://example.org/mangroves.zip",
+            files=("*/mangroves.shp",),  # glob patterns inside the extracted zip
+        ),
+    ),
+    max_zoom=10,
+    fields=("name", "year"),  # attributes to keep
+    where="year >= 2000",  # optional attribute filter
+)
+```
+
+Every file matched by every source is merged into a single tile layer, named after the
+tileset. Zips nested inside the download are extracted too.
+When a layer merges several sources, give each one a `label` and list `"type"` in `fields`:
+each feature then gets a `type` attribute with its source label (see `CORAL_REEFS`, which
+labels features as `warm` or `cold`).
+
+Rasters that need to be vectorized for uploading them to Mapbox, are published as polygons instead:
+a `ClassifiedRasterLayer` classifies the raster into value bins and polygonizes each bin.
+Each polygon gets `level`, the lower bound of its bin, for `step` or `interpolate` colour ramps,
+and `class`, its label, for `match` expressions:
+
+``` python
+TREE_COVER_2000 = ClassifiedRasterLayer(
+    name="tree_cover_2000",
+    title="Tree cover 2000",
+    index=TextTileIndex(url="https://example.org/tiles.txt"),  # one tile URL per line
+    classes=((10, "10-30"), (30, "30-50"), (50, "50-75"), (75, "75-100")),
+    max_value=100,  # upper bound of the last bin
+    bands=FOREST_BANDS,  # a resampling grid and sieve per zoom range
+)
+```
+
+Elevation rasters are published as a `HillshadeLayer`: transparent tiles with black shadows
+and white highlights, shaded per zoom so relief stays visible when zoomed out.
+
+Check each source's licence: most require attribution on the map. The EEZ layer is Marine
+Regions, CC BY 4.0. Global Mangrove Watch v3.0 is CC BY 4.0: cite Bunting et al. (2022).
+Tree cover 2000 is CC BY 4.0: cite Hansen et al. (2013). Tree biomass density is CC BY 4.0:
+cite Harris et al. (2021). The GEBCO grid is public domain: cite the GEBCO Compilation Group
+(2026).
+The WDPA and the UNEP-WCMC coral datasets are for **non-commercial** use only, must not be
+downloadable from the map, and need a visible citation with the release year and a link to [protectedplanet.net](https://www.protectedplanet.net) or
+[unep-wcmc.org](https://www.unep-wcmc.org). The WDPA licence also requires the latest
+monthly release, so update its URL in `layers.py` when publishing again.
 
 ## Notebooks
 
