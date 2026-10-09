@@ -187,6 +187,8 @@ OCEAN_HILLSHADE = HillshadeLayer(
     # Land and ice shelves are transparent, so only the seafloor is shaded.
     max_height=0,
     exaggeration=2,
+    shadow_color="#001436",
+    highlight_color="#016AFE",
 )
 
 LAYERS: dict[str, Layer] = {

@@ -211,20 +211,24 @@ class ClassifiedRasterLayer(Layer):
 class HillshadeLayer(Layer):
     """An elevation raster shaded into transparent hillshade tiles.
 
-    Black shadows and white highlights over transparency, styled in Mapbox Studio as a raster
-    layer (opacity, brightness, contrast).
+    Shadow and highlight colours over transparency, styled in Mapbox Studio as a raster layer
+    (opacity, brightness, contrast).
 
     Attributes:
         source: Elevation rasters in metres, mosaicked together.
         max_zoom: Highest zoom level of the 512 px tiles; Mapbox overzooms above it.
         max_height: Heights above it are flat and transparent, such as 0 for the seafloor only.
         exaggeration: Vertical exaggeration at ``max_zoom``, raised when zoomed out.
+        shadow_color: Colour of shaded slopes.
+        highlight_color: Colour of lit slopes.
     """
 
     source: Source
     max_zoom: int
     max_height: float | None = None
     exaggeration: float = 1.0
+    shadow_color: str = "#000000"
+    highlight_color: str = "#ffffff"
 
     def build(self, refresh: bool = False) -> Path:
         return dem_to_hillshade(
@@ -233,4 +237,6 @@ class HillshadeLayer(Layer):
             max_zoom=self.max_zoom,
             max_height=self.max_height,
             exaggeration=self.exaggeration,
+            shadow_color=self.shadow_color,
+            highlight_color=self.highlight_color,
         )

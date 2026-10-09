@@ -136,8 +136,8 @@ TREE_COVER_2000 = ClassifiedRasterLayer(
 )
 ```
 
-Elevation rasters are published as a `HillshadeLayer`: transparent tiles with black shadows
-and white highlights, shaded per zoom so relief stays visible when zoomed out.
+Elevation rasters are published as a `HillshadeLayer`: transparent tiles with shadow and
+highlight colours, shaded per zoom so relief stays visible when zoomed out.
 
 Check each source's licence: most require attribution on the map. The EEZ layer is Marine
 Regions, CC BY 4.0. Global Mangrove Watch v3.0 is CC BY 4.0: cite Bunting et al. (2022).
