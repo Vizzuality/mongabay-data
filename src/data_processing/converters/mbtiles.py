@@ -13,6 +13,11 @@ from ._gdal import run_gdal
 _ZOOM_0_RESOLUTION = 2 * math.pi * 6378137 / 256
 # Web Mercator extent in degrees; it stops at about 85.05 degrees of latitude.
 _WEB_MERCATOR_BBOX = "-180,-85.0511287798066,180,85.0511287798066"
+# Pixel size of the tiles we render ourselves; Mapbox serves them at 256 px and at 512 px
+# for high-DPI screens.
+TILE_SIZE = 512
+# Half the width of the Web Mercator square, in metres.
+WEB_MERCATOR_HALF = math.pi * 6378137
 
 
 def vector_to_mbtiles(
@@ -95,6 +100,30 @@ def vector_to_mbtiles(
     ]  # fmt: skip
     run_gdal("vector", "pipeline", "--quiet", *steps)
     return output_path
+
+
+def create_mbtiles(path: Path, name: str, min_zoom: int, max_zoom: int) -> sqlite3.Connection:
+    """Create an empty MBTiles of global PNG tiles and return an open connection to it.
+
+    Tiles are added as ``(zoom_level, tile_column, tile_row, tile_data)`` rows, with rows
+    numbered from the bottom.
+    """
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE metadata (name TEXT, value TEXT)")
+    db.execute(
+        "CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER,"
+        " tile_data BLOB, PRIMARY KEY (zoom_level, tile_column, tile_row))"
+    )
+    metadata = {
+        "name": name,
+        "format": "png",
+        "type": "overlay",
+        "minzoom": str(min_zoom),
+        "maxzoom": str(max_zoom),
+        "bounds": _WEB_MERCATOR_BBOX,
+    }
+    db.executemany("INSERT INTO metadata VALUES (?, ?)", metadata.items())
+    return db
 
 
 def merge_mbtiles(input_paths: Sequence[Path], output_path: Path) -> Path:

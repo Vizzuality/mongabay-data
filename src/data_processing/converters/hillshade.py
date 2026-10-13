@@ -2,7 +2,6 @@
 
 import io
 import math
-import sqlite3
 import tempfile
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -13,12 +12,12 @@ from PIL import Image
 from PIL import ImageColor
 
 from ._gdal import run_gdal
+from .mbtiles import TILE_SIZE
+from .mbtiles import WEB_MERCATOR_HALF
+from .mbtiles import create_mbtiles
 
-# Pixel size of the tiles; Mapbox serves them at 256 px and at 512 px for high-DPI screens.
-TILE_SIZE = 512
-# Earth radius of Web Mercator, and half the width of its square, in metres.
+# Earth radius of Web Mercator, in metres.
 _RADIUS = 6378137
-_WEB_MERCATOR_HALF = math.pi * _RADIUS
 # Light from the north-west, 45 degrees above the horizon, as on most shaded relief maps.
 _AZIMUTH = math.radians(315)
 _ALTITUDE = math.radians(45)
@@ -72,7 +71,7 @@ def dem_to_hillshade(
             *map(str, dem_paths), str(dem),
         )  # fmt: skip
         mbtiles = Path(tmp) / "hillshade.mbtiles"
-        db = _create_mbtiles(mbtiles, output_path.stem, min_zoom, max_zoom)
+        db = create_mbtiles(mbtiles, output_path.stem, min_zoom, max_zoom)
         for zoom in range(min_zoom, max_zoom + 1):
             zoom_exaggeration = exaggeration * 2 ** ((max_zoom - zoom) / 2)
             with ThreadPoolExecutor(workers) as pool:
@@ -101,9 +100,9 @@ def _shade_row(
 ) -> list[tuple[int, int, int, bytes]]:
     """Resample one row of tiles from ``dem`` and shade its tiles."""
     count = 2**zoom
-    tile_metres = 2 * _WEB_MERCATOR_HALF / count
+    tile_metres = 2 * WEB_MERCATOR_HALF / count
     pixel = tile_metres / TILE_SIZE
-    top = _WEB_MERCATOR_HALF - row * tile_metres
+    top = WEB_MERCATOR_HALF - row * tile_metres
     # One extra pixel above and below, so slopes at the tile edges match their neighbours.
     strip = tmp / f"z{zoom}_{row}.bin"
     run_gdal(
@@ -112,7 +111,7 @@ def _shade_row(
         "!", "set-type", "--ot", "Float32",
         "!", "reproject", "--dst-crs", "EPSG:3857", "-r", "bilinear",
         "--bbox",
-        f"{-_WEB_MERCATOR_HALF},{top - tile_metres - pixel},{_WEB_MERCATOR_HALF},{top + pixel}",
+        f"{-WEB_MERCATOR_HALF},{top - tile_metres - pixel},{WEB_MERCATOR_HALF},{top + pixel}",
         "--size", f"{TILE_SIZE * count},{TILE_SIZE + 2}",
         "!", "write", str(strip), "--of", "ENVI", "--overwrite",
     )  # fmt: skip
@@ -168,22 +167,3 @@ def _shade(
     rgba[..., :3] = np.where(lit, colors[1], colors[0])
     rgba[..., 3] = np.rint(255 * np.maximum(shadow, highlight))
     return rgba
-
-
-def _create_mbtiles(path: Path, name: str, min_zoom: int, max_zoom: int) -> sqlite3.Connection:
-    db = sqlite3.connect(path)
-    db.execute("CREATE TABLE metadata (name TEXT, value TEXT)")
-    db.execute(
-        "CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER,"
-        " tile_data BLOB, PRIMARY KEY (zoom_level, tile_column, tile_row))"
-    )
-    metadata = {
-        "name": name,
-        "format": "png",
-        "type": "overlay",
-        "minzoom": str(min_zoom),
-        "maxzoom": str(max_zoom),
-        "bounds": "-180,-85.0511287798066,180,85.0511287798066",
-    }
-    db.executemany("INSERT INTO metadata VALUES (?, ?)", metadata.items())
-    return db
