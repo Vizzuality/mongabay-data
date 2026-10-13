@@ -1,4 +1,4 @@
-"""Layers built from rasters: classified into polygons, or shaded into hillshade tiles."""
+"""Layers built from rasters: classified into polygons, encoded as grey levels, or shaded."""
 
 import shutil
 import tempfile
@@ -10,12 +10,15 @@ from rich import get_console
 
 from ..config import MBTILES_DIR
 from ..config import POLYGONS_DIR
+from ..config import RASTERS_DIR
 from ..converters.hillshade import dem_to_hillshade
+from ..converters.mbtiles import TILE_SIZE
 from ..converters.mbtiles import merge_mbtiles
 from ..converters.mbtiles import vector_to_mbtiles
 from ..converters.polygons import classify_to_polygons
 from ..converters.polygons import resample
 from ..converters.polygons import unset_nodata
+from ..converters.value_tiles import raster_to_value_tiles
 from ..download import download_file
 from .base import Layer
 from .sources import Source
@@ -240,3 +243,95 @@ class HillshadeLayer(Layer):
             shadow_color=self.shadow_color,
             highlight_color=self.highlight_color,
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ValueRasterLayer(Layer):
+    """A tiled raster published as image tiles whose grey levels encode its values.
+
+    Coloured in Mapbox Studio with a ``raster-color`` ramp, so classes and colours can change
+    without building again. Each source tile is downloaded, averaged into a fine and a
+    coarse copy, which are kept, and deleted, by ``workers`` tiles at a time; tiles already
+    copied are skipped, so an interrupted run resumes where it stopped. Zooms whose pixels
+    are at least ``coarse_resolution`` are tiled from the coarse copies, the others from the
+    fine ones.
+
+    Attributes:
+        index: List of the raster's tiles.
+        max_zoom: Highest zoom level of the 512 px tiles; Mapbox overzooms above it.
+        scale: Value of one grey level; values above ``255 * scale`` are capped.
+        workers: Number of tiles processed at the same time.
+        fine_resolution: Cell size of the fine copies, in degrees, about that of
+            ``max_zoom``.
+        coarse_resolution: Cell size of the coarse copies, in degrees.
+    """
+
+    index: TileIndex
+    max_zoom: int
+    scale: float = 1.0
+    workers: int = 4
+    fine_resolution: float = 0.0005
+    coarse_resolution: float = 0.004
+
+    def _copy(self, resolution: float, tile: str) -> Path:
+        return RASTERS_DIR / self.name / f"{resolution:g}deg" / f"{tile}.tif"
+
+    def build(self, refresh: bool = False) -> Path:
+        if refresh:
+            shutil.rmtree(RASTERS_DIR / self.name, ignore_errors=True)
+        tiles = self.index.tile_urls()
+        self._resample_all(tiles)
+        # Equatorial pixel size of each zoom, in degrees.
+        split = max(
+            z
+            for z in range(self.max_zoom + 1)
+            if 360 / (TILE_SIZE * 2**z) >= self.coarse_resolution
+        )
+        MBTILES_DIR.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=MBTILES_DIR) as tmp:
+            parts = [
+                raster_to_value_tiles(
+                    [self._copy(resolution, tile) for tile in tiles],
+                    Path(tmp) / str(min_zoom) / f"{self.name}.mbtiles",
+                    min_zoom=min_zoom,
+                    max_zoom=max_zoom,
+                    scale=self.scale,
+                    workers=self.workers,
+                )
+                for resolution, min_zoom, max_zoom in (
+                    (self.coarse_resolution, 0, split),
+                    (self.fine_resolution, split + 1, self.max_zoom),
+                )
+                if min_zoom <= max_zoom
+            ]
+            return merge_mbtiles(parts, self.mbtiles_path)
+
+    def _resample_all(self, tiles: dict[str, str]) -> None:
+        """Copy every tile in parallel, then report all the tiles that failed."""
+        get_console().print(f"Resampling {len(tiles)} tiles, {self.workers} at a time")
+        with ThreadPoolExecutor(self.workers) as pool:
+            futures = {
+                tile: pool.submit(self._resample_tile, tile, url) for tile, url in tiles.items()
+            }
+        errors = {tile: error for tile, future in futures.items() if (error := future.exception())}
+        for tile, error in errors.items():
+            get_console().print(f"[red]{tile} failed: {error}")
+        if errors:
+            raise RuntimeError(f"{len(errors)} tiles failed; run again to retry only those")
+
+    def _resample_tile(self, tile: str, url: str) -> None:
+        resolutions = (self.fine_resolution, self.coarse_resolution)
+        missing = [r for r in resolutions if not self._copy(r, tile).exists()]
+        if not missing:
+            return
+        self.raw_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=self.raw_dir) as tmp:
+            raster = download_file(url, Path(tmp) / f"{tile}.tif")
+            # Nodata means none here, such as no biomass: count it as 0 when averaging.
+            unset_nodata(raster)
+            for resolution in missing:
+                # Moved into place only once complete, so a present copy is a finished one.
+                copy = resample(raster, Path(tmp) / f"{resolution:g}.tif", resolution)
+                self._copy(resolution, tile).parent.mkdir(parents=True, exist_ok=True)
+                copy.replace(self._copy(resolution, tile))
+        get_console().print(f"Resampled {tile}")

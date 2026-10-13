@@ -3,6 +3,7 @@
 from .base import Layer
 from .raster import ClassifiedRasterLayer
 from .raster import HillshadeLayer
+from .raster import ValueRasterLayer
 from .raster import ZoomBand
 from .sources import ArcGISTileIndex
 from .sources import Source
@@ -144,6 +145,17 @@ TREE_COVER_2000 = ClassifiedRasterLayer(
     bands=FOREST_BANDS,
 )
 
+# The same data as TREE_COVER_2000, as grey levels for a colour ramp in Studio.
+TREE_COVER_2000_RASTER = ValueRasterLayer(
+    name="tree_cover_2000_raster",
+    title="Tree cover 2000 raster (Hansen/UMD/Google/USGS/NASA)",
+    index=TREE_COVER_2000.index,
+    # 512 px tiles at z9 are about 150 m per pixel at the equator. At z10 the global MBTiles
+    # would be about 35 GB, over the 25 GB Mapbox upload limit.
+    max_zoom=9,
+    scale=1,  # one grey level per percent of canopy density
+)
+
 # Harris et al. (2021), Nature Climate Change. WHRC aboveground live woody biomass density
 # 2000, v1.4. CC BY 4.0.
 TREE_BIOMASS_DENSITY = ClassifiedRasterLayer(
@@ -168,6 +180,16 @@ TREE_BIOMASS_DENSITY = ClassifiedRasterLayer(
     ),
     max_value=65535,  # the UInt16 maximum: the last bin is open-ended
     bands=FOREST_BANDS,
+)
+
+# The same data as TREE_BIOMASS_DENSITY, as grey levels for a colour ramp in Studio.
+TREE_BIOMASS_DENSITY_RASTER = ValueRasterLayer(
+    name="tree_biomass_density_raster",
+    title="Aboveground live woody biomass density 2000 raster (WHRC)",
+    index=TREE_BIOMASS_DENSITY.index,
+    max_zoom=9,  # as TREE_COVER_2000_RASTER
+    # One grey level per 2.5 Mg/ha, up to 637.5 Mg/ha; denser forests are capped there.
+    scale=2.5,
 )
 
 # GEBCO Compilation Group (2026), GEBCO_2026 Grid, doi:10.5285/4f68d5c7-45eb-f999-e063-7086abc036fa.
@@ -200,6 +222,8 @@ LAYERS: dict[str, Layer] = {
         MANGROVES,
         TREE_COVER_2000,
         TREE_BIOMASS_DENSITY,
+        TREE_COVER_2000_RASTER,
+        TREE_BIOMASS_DENSITY_RASTER,
         OCEAN_HILLSHADE,
     )
 }

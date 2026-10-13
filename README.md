@@ -136,6 +136,12 @@ TREE_COVER_2000 = ClassifiedRasterLayer(
 )
 ```
 
+To colour a raster in Mapbox Studio instead, publish it as a `ValueRasterLayer`: each pixel's
+grey level is its value divided by `scale`, and 0 is transparent. In Studio, add it as a
+raster layer and colour it with `raster-color`, setting `raster-color-mix` to
+`[54.213 * scale, 182.376 * scale, 18.411 * scale, 0]` (255 times the luminance weights) so
+that `["raster-value"]` gives the original values.
+
 Elevation rasters are published as a `HillshadeLayer`: transparent tiles with shadow and
 highlight colours, shaded per zoom so relief stays visible when zoomed out.
 

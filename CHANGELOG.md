@@ -26,6 +26,8 @@ Unreleased
   parallel, and the Tree cover 2000 (Hansen) and Tree biomass density (WHRC) layers.
 - Hillshade layers shaded per zoom from elevation rasters, and the Ocean hillshade layer
   (GEBCO 2026).
+- Value raster layers, whose grey levels encode the values for colour ramps in Mapbox Studio,
+  and raster versions of the Tree cover 2000 and Tree biomass density layers.
 
 ### Changed
 
