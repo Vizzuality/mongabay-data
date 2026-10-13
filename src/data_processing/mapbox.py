@@ -1,0 +1,171 @@
+"""Upload tilesets (MBTiles, GeoTIFF) to Mapbox with the Uploads API.
+
+See https://docs.mapbox.com/api/maps/uploads/. The token must be a secret token with the
+``uploads:write`` scope.
+"""
+
+import os
+import re
+import time
+from dataclasses import dataclass
+from dataclasses import field
+from pathlib import Path
+
+import boto3
+import requests
+from rich.progress import Progress
+
+UPLOADS_API = "https://api.mapbox.com/uploads/v1"
+REQUEST_TIMEOUT = 30
+TILESET_NAME_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,32}")
+# Mapbox rejects display names with punctuation such as brackets or commas.
+DISPLAY_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9 _-]+")
+
+
+@dataclass(frozen=True, kw_only=True)
+class MapboxAccount:
+    """The Mapbox account that tilesets are uploaded to.
+
+    Attributes:
+        username: Mapbox account name, the ``username`` in ``username.tileset``.
+        token: Secret token with the ``uploads:write`` scope.
+    """
+
+    username: str
+    token: str = field(repr=False)
+
+    @classmethod
+    def from_env(cls) -> "MapboxAccount":
+        """Read the account from the ``MAPBOX_USER`` and ``MAPBOX_TOKEN`` variables.
+
+        Raises:
+            RuntimeError: If either variable is missing or empty.
+        """
+        values = {key: os.environ.get(key) for key in ("MAPBOX_USER", "MAPBOX_TOKEN")}
+        if missing := [key for key, value in values.items() if not value]:
+            raise RuntimeError(f"Set {' and '.join(missing)} in .env to upload to Mapbox")
+        return cls(username=values["MAPBOX_USER"], token=values["MAPBOX_TOKEN"])
+
+
+def _raise_for_status(response: requests.Response) -> None:
+    """Raise with Mapbox's error message, leaving out the URL, which carries the token."""
+    if not response.ok:
+        raise requests.HTTPError(
+            f"Mapbox answered {response.status_code}: {response.text}", response=response
+        )
+
+
+def validate_tileset_name(tileset: str) -> None:
+    """Raise ``ValueError`` unless ``tileset`` is a valid Mapbox tileset name.
+
+    The name excludes the ``username.`` prefix: at most 32 letters, digits, ``-`` or ``_``.
+    """
+    if not TILESET_NAME_PATTERN.fullmatch(tileset):
+        raise ValueError(
+            f"Invalid tileset name {tileset!r}: use 1 to 32 letters, digits, '-' or '_'."
+        )
+
+
+def get_s3_credentials(username: str, token: str) -> dict:
+    """Request temporary S3 credentials for Mapbox's staging bucket."""
+    response = requests.post(
+        f"{UPLOADS_API}/{username}/credentials",
+        params={"access_token": token},
+        timeout=REQUEST_TIMEOUT,
+    )
+    _raise_for_status(response)
+    return response.json()
+
+
+def upload_to_staging(source: Path, credentials: dict) -> None:
+    """Upload ``source`` to the staging bucket described by ``credentials``."""
+    session = boto3.Session(
+        aws_access_key_id=credentials["accessKeyId"],
+        aws_secret_access_key=credentials["secretAccessKey"],
+        aws_session_token=credentials["sessionToken"],
+    )
+    s3 = session.client("s3", region_name="us-east-1", endpoint_url="https://s3.amazonaws.com")
+    s3.upload_file(str(source), credentials["bucket"], credentials["key"])
+
+
+def create_upload(username: str, token: str, credentials: dict, tileset: str, name: str) -> str:
+    """Ask Mapbox to create or replace ``username.tileset`` from the staged file.
+
+    Returns:
+        The id of the upload, used to poll its status.
+    """
+    response = requests.post(
+        f"{UPLOADS_API}/{username}",
+        params={"access_token": token},
+        json={"url": credentials["url"], "tileset": f"{username}.{tileset}", "name": name},
+        timeout=REQUEST_TIMEOUT,
+    )
+    _raise_for_status(response)
+    return response.json()["id"]
+
+
+def wait_for_upload(
+    username: str,
+    token: str,
+    upload_id: str,
+    poll_seconds: float = 5,
+    timeout_seconds: float = 3600,
+) -> dict:
+    """Poll an upload until Mapbox finishes processing it.
+
+    Returns:
+        The final upload status.
+
+    Raises:
+        RuntimeError: If Mapbox reports an error for the upload.
+        TimeoutError: If the upload is not complete after ``timeout_seconds``.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    with Progress() as progress:
+        task = progress.add_task("Processing tileset in Mapbox", total=100)
+        while True:
+            response = requests.get(
+                f"{UPLOADS_API}/{username}/{upload_id}",
+                params={"access_token": token},
+                timeout=REQUEST_TIMEOUT,
+            )
+            _raise_for_status(response)
+            status = response.json()
+
+            if status["error"]:
+                raise RuntimeError(f"Mapbox upload {upload_id} failed: {status['error']}")
+            progress.update(task, completed=round(status["progress"] * 100))
+            if status["complete"]:
+                return status
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"Mapbox upload {upload_id} not complete after {timeout_seconds}s"
+                )
+            time.sleep(poll_seconds)
+
+
+def upload_tileset(
+    source: Path,
+    tileset: str,
+    account: MapboxAccount,
+    name: str | None = None,
+) -> dict:
+    """Upload ``source`` to Mapbox as ``username.tileset`` and wait until it is ready.
+
+    Args:
+        source: File to upload (``.mbtiles``, ``.tif``, ``.geojson``, ...).
+        tileset: Tileset name without the ``username.`` prefix.
+        account: Account to upload to.
+        name: Display name in Mapbox Studio. Defaults to ``tileset``. Characters other than
+            letters, digits, spaces, ``-`` and ``_`` are replaced with spaces.
+
+    Returns:
+        The final upload status.
+    """
+    validate_tileset_name(tileset)
+    display_name = " ".join(DISPLAY_NAME_UNSAFE.sub(" ", name or tileset).split())
+    username, token = account.username, account.token
+    credentials = get_s3_credentials(username, token)
+    upload_to_staging(source, credentials)
+    upload_id = create_upload(username, token, credentials, tileset, display_name)
+    return wait_for_upload(username, token, upload_id)
