@@ -5,10 +5,15 @@ import requests
 import numpy as np
 import pandas as pd
 import datetime as dt
+import google.auth
 
-service_account = "fire-water-chart@appspot.gserviceaccount.com"
-credentials = ee.ServiceAccountCredentials(service_account, "privatekey.json")
-ee.Initialize(credentials)
+credentials, _ = google.auth.default(
+    scopes=[
+        "https://www.googleapis.com/auth/earthengine",
+        "https://www.googleapis.com/auth/cloud-platform",
+    ]
+)
+ee.Initialize(credentials, project="fire-water-chart")
 
 
 def serializer(df_pre, df_fire):
@@ -100,6 +105,7 @@ def get_dates(date_text=None):
     start_date = date - dt.timedelta(days=nDays_year + 61)
     end_date = date + dt.timedelta(days=61)
     dates = pd.date_range(start_date, end_date, freq="D").astype(str)
+    dates = dates[(dates <= pd.to_datetime("today").normalize().strftime("%Y-%m-%d"))]
 
     return dates, start_date, date, end_date, start_year_date
 
@@ -214,7 +220,10 @@ def fire_water_chart(request):
     url = f"https://data-api.globalforestwatch.org/dataset/gadm__viirs__adm2_daily_alerts/latest/query/json"
 
     sql = {"sql": query}
-    r = requests.get(url, params=sql)
+    r = requests.get(
+        url, params=sql, headers={"x-api-key": os.environ["GFW_API_KEY"]}
+    )
+    r.raise_for_status()
 
     data = r.json().get("data")
     if data:
@@ -235,16 +244,14 @@ def fire_water_chart(request):
     # Moving averages
     # 1 week moving average
     df_pre["precipitation_w"] = (
-        df_pre[["date", "precipitation"]].rolling(window=7, center=True).mean()
+        df_pre["precipitation"].rolling(window=7, center=True).mean()
     )
-    df_fire["fire_w"] = df_fire[["date", "fire"]].rolling(window=7, center=True).mean()
+    df_fire["fire_w"] = df_fire["fire"].rolling(window=7, center=True).mean()
     # 2 month moving average
     df_pre["precipitation_2m"] = (
-        df_pre[["date", "precipitation"]].rolling(window=61, center=True).mean()
+        df_pre["precipitation"].rolling(window=61, center=True).mean()
     )
-    df_fire["fire_2m"] = (
-        df_fire[["date", "fire"]].rolling(window=61, center=True).mean()
-    )
+    df_fire["fire_2m"] = df_fire["fire"].rolling(window=61, center=True).mean()
     # take current year days
     df_pre = df_pre[
         (df_pre["date"] >= start_year_date.strftime("%Y-%m-%d"))
